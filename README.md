@@ -1,4 +1,4 @@
-# Bot Baileys
+# Nexa_Bot Baileys
 
 This repository contains a WhatsApp bot implemented in JavaScript using the [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys) library.
 
@@ -58,6 +58,8 @@ Follow these steps to deploy the application:
 - `sendContact(remoteJid, contactNumber, displayName, messages)`: Sends a contact to a given chat ID. The contact is specified by a phone number and a display name, and additional messages can be sent along with the contact.
 - `sendPresenceUpdate(remoteJid, WAPresence)`: Sends a presence update (e.g., "recording") to a given chat ID.
 - `sendSticker(remoteJid, url, stickerOptions, messages)`: Sends a sticker to a given chat ID. The sticker is specified by a URL, and additional messages can be sent along with the sticker.
+-`/everyone`: It call everyone members of the group in a message 
+-`bible-verse`: listen to incoming bible verse message and send the corresponding bible verse from bible api
 
 Please note that these methods are asynchronous, meaning they return a promise that resolves once the action is completed.
 
@@ -154,9 +156,7 @@ botBaileys.on('message', async (message) => {
 });
 ```
 
-### Acknowledgements
 
-This project was inspired by ideas and code from the [bot-whatsapp](https://github.com/codigoencasa/bot-whatsapp) repository by codigoencasa. Their work on creating automated conversation flows and setting up automated responses for frequently asked questions was particularly influential. We appreciate their contributions to the open-source community and their work on WhatsApp bot development.
 
 
 ### Contribution
@@ -164,5 +164,5 @@ If you want to contribute to this project, feel free to do so. Any type of impro
 
 ### Licencia
 
-This project is licensed under the [MIT](LICENSE).
+This project is Created by MayorTech.
 

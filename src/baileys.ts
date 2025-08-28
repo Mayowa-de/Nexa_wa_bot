@@ -1,24 +1,25 @@
 import { EventEmitter } from 'events';
-import pino, { Logger } from 'pino'
+import pino, {Logger}  from 'pino'
 import NodeCache from 'node-cache'
 import makeWASocket, {
     DisconnectReason,
     fetchLatestBaileysVersion,
     getAggregateVotesInPollMessage,
     makeCacheableSignalKeyStore,
-    makeInMemoryStore,
     useMultiFileAuthState,
     Browsers,
     proto,
     WAMessageContent,
     WAMessageKey
 } from '@whiskeysockets/baileys'
+import makeInMemoryStore from '@whiskeysockets/baileys';
 import { readFileSync, existsSync, rmSync } from 'fs';
 
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 import mime from 'mime-types';
+import qrcode from 'qrcode-terminal';
 
 import utils from './utils';
 import { join } from 'path';
@@ -53,6 +54,11 @@ const msgRetryCounterCache = new NodeCache()
 
 
 export class BaileysClass extends EventEmitter {
+    // Add public method to get group metadata
+    public async getGroupMetadata(jid: string): Promise<any> {
+        if (!this.sock) throw new Error('Socket not initialized');
+        return await this.sock.groupMetadata(jid);
+    }
     private vendor: any;
     private store: any;
     private globalVendorArgs: Args;
@@ -65,7 +71,7 @@ export class BaileysClass extends EventEmitter {
         super()
         this.vendor = null;
         this.store = null;
-        this.globalVendorArgs = { name: `bot`, usePairingCode: false, phoneNumber: null, gifPlayback: false, dir: './', ...args };
+        this.globalVendorArgs = { name: `Nexa_bot`, usePairingCode: false, phoneNumber: null, gifPlayback: false, dir: './', ...args };
         this.NAME_DIR_SESSION = `${this.globalVendorArgs.dir}${this.globalVendorArgs.name}_sessions`;
         this.initBailey();
 
@@ -89,20 +95,14 @@ export class BaileysClass extends EventEmitter {
 
     initBailey = async (): Promise<void> => {
 
-        const logger : Logger = pino({ level: this.globalVendorArgs.debug ? 'debug' : 'fatal' })
-        const { state, saveCreds } = await useMultiFileAuthState(this.NAME_DIR_SESSION);
+        const logger: Logger = pino({ level: this.globalVendorArgs.debug ? 'debug' : 'fatal',});
+        const { state, saveCreds } = await useMultiFileAuthState(this.NAME_DIR_SESSION)
         const { version, isLatest } = await fetchLatestBaileysVersion()
 
         if (this.globalVendorArgs.debug) console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
-        this.store = makeInMemoryStore({ logger })
-        this.store.readFromFile(`${this.NAME_DIR_SESSION}/baileys_store.json`)
-        setInterval(() => {
-            const path = `${this.NAME_DIR_SESSION}/baileys_store.json`;
-            if(existsSync(path)) {
-                this.store.writeToFile(path);
-            }
-        }, 10_000);
+        this.store = makeInMemoryStore({logger, auth: state})
+        // Persistence methods removed: readFromFile and writeToFile are not available in current makeInMemoryStore
 
         try {
             this.setUpBaileySock({ version, logger, state, saveCreds });
@@ -115,8 +115,8 @@ export class BaileysClass extends EventEmitter {
         this.sock = makeWASocket({
             version,
             logger,
-            printQRInTerminal: this.plugin || this.globalVendorArgs.usePairingCode ? false : true,
-            auth: {
+            // printQRInTerminal option removed (deprecated)
+            auth : {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger),
             },
@@ -126,7 +126,7 @@ export class BaileysClass extends EventEmitter {
             getMessage: this.getMessage,
         })
 
-        this.store?.bind(this.sock.ev)
+    // Store binding removed: bind method is not available in current Baileys store API
 
         if (this.globalVendorArgs.usePairingCode) {
             if (this.globalVendorArgs.phoneNumber) {
@@ -168,6 +168,8 @@ export class BaileysClass extends EventEmitter {
         }
 
         if (qr && !this.globalVendorArgs.usePairingCode) {
+            // Print graphical QR code in terminal
+            qrcode.generate(qr, { small: true });
             if (this.plugin) this.emit('require_action', {
                 instructions: [
                     `Debes escanear el QR Code 👌 ${this.globalVendorArgs.name}.qr.png`,
@@ -366,9 +368,13 @@ export class BaileysClass extends EventEmitter {
      * @param {string} message
      * @returns
      */
-    sendText = async (number: string, message: string): Promise<any> => {
+    sendText = async (number: string, message: string | { text: string, mentions?: any[] }): Promise<any> => {
         const numberClean = utils.formatPhone(number)
-        return this.vendor.sendMessage(numberClean, { text: message })
+        if (typeof message === 'string') {
+            return this.vendor.sendMessage(numberClean, { text: message })
+        } else {
+            return this.vendor.sendMessage(numberClean, message)
+        }
     }
 
     /**

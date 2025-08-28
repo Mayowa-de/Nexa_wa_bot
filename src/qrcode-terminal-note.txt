@@ -1,0 +1,1 @@
+// This file will be used to install and use qrcode-terminal for graphical QR code rendering
