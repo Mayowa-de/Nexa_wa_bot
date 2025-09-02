@@ -1,4 +1,4 @@
-import { BaileysClass } from '../src/baileys.js';
+import { BaileysClass } from '../src/baileys.ts';
 // Add type for BaileysClass with getGroupMetadata method
 import fetch from 'node-fetch';
 

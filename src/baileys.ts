@@ -1,18 +1,18 @@
 import { EventEmitter } from 'events';
 import pino, {Logger}  from 'pino'
 import NodeCache from 'node-cache'
-import makeWASocket, {
+import  {
+    makeWASocket, 
     DisconnectReason,
     fetchLatestBaileysVersion,
     getAggregateVotesInPollMessage,
     makeCacheableSignalKeyStore,
-    useMultiFileAuthState,
     Browsers,
-    proto,
     WAMessageContent,
     WAMessageKey
 } from '@whiskeysockets/baileys'
-import makeInMemoryStore from '@whiskeysockets/baileys';
+import { useMultiFileAuthState } from '@whiskeysockets/baileys';
+import { saveSession, loadSession } from './mysql-session.ts';
 import { readFileSync, existsSync, rmSync } from 'fs';
 
 import ffmpeg from 'fluent-ffmpeg';
@@ -21,7 +21,7 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import mime from 'mime-types';
 import qrcode from 'qrcode-terminal';
 
-import utils from './utils';
+import utils from './utils.ts';
 import { join } from 'path';
 
 
@@ -88,7 +88,7 @@ export class BaileysClass extends EventEmitter {
             return msg?.message || undefined
         }
         // only if store is present
-        return proto.Message.fromObject({})
+        return undefined
     }
 
     getInstance = (): any => this.vendor;
@@ -96,13 +96,21 @@ export class BaileysClass extends EventEmitter {
     initBailey = async (): Promise<void> => {
 
         const logger: Logger = pino({ level: this.globalVendorArgs.debug ? 'debug' : 'fatal',});
-        const { state, saveCreds } = await useMultiFileAuthState(this.NAME_DIR_SESSION)
-        const { version, isLatest } = await fetchLatestBaileysVersion()
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        if (this.globalVendorArgs.debug) console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`);
 
-        if (this.globalVendorArgs.debug) console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
+        // Load session from MySQL
+        let state = await loadSession(this.NAME_DIR_SESSION);
+        let saveCreds = async (creds: any) => {
+            await saveSession(this.NAME_DIR_SESSION, creds);
+        };
 
-        this.store = makeInMemoryStore({logger, auth: state})
-        // Persistence methods removed: readFromFile and writeToFile are not available in current makeInMemoryStore
+        // If no session, use Baileys default
+        if (!state) {
+            const multiFile = await useMultiFileAuthState(this.NAME_DIR_SESSION);
+            state = multiFile.state;
+            saveCreds = multiFile.saveCreds;
+        }
 
         try {
             this.setUpBaileySock({ version, logger, state, saveCreds });
@@ -115,7 +123,6 @@ export class BaileysClass extends EventEmitter {
         this.sock = makeWASocket({
             version,
             logger,
-            // printQRInTerminal option removed (deprecated)
             auth : {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger),
@@ -149,7 +156,10 @@ export class BaileysClass extends EventEmitter {
         }
 
         this.sock.ev.on('connection.update', this.handleConnectionUpdate);
-        this.sock.ev.on('creds.update', saveCreds)
+        this.sock.ev.on('creds.update', async (creds) => {
+            await saveCreds(creds);
+            await saveSession(this.NAME_DIR_SESSION, { creds, keys: state.keys });
+        });
     }
 
     handleConnectionUpdate = async (update: any): Promise<void> => {
